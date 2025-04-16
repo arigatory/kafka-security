@@ -1,4 +1,4 @@
-# kafka-security
+# Задание 1. Балансировка партиций и диагностика кластера
 
 Создание топика balanced_topic
 
@@ -97,4 +97,20 @@ Topic: balanced_topic   TopicId: QUdbsfcmTkydyhe469GI2A PartitionCount: 8       
         Topic: balanced_topic   Partition: 6    Leader: 2       Replicas: 0,1,2 Isr: 2,0,1
         Topic: balanced_topic   Partition: 7    Leader: 2       Replicas: 1,2,0 Isr: 0,2,1
 
-        
+# Задание 2. Настройка защищённого соединения и управление доступом
+
+Генерация cертификатов
+
+generate-certs.sh
+
+Запуск кластера
+
+docker compose up -d
+
+Создание топиков
+
+create-topics.sh
+
+Настройка ACL
+
+set-acl.sh
