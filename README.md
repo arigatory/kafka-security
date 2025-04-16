@@ -99,18 +99,23 @@ Topic: balanced_topic   TopicId: QUdbsfcmTkydyhe469GI2A PartitionCount: 8       
 
 # Задание 2. Настройка защищённого соединения и управление доступом
 
-Генерация cертификатов
-
+### Генерация cертификатов
+```
 generate-certs.sh
+```
 
-Запуск кластера
-
+### Запуск кластера
+```
 docker compose up -d
+```
 
-Создание топиков
+### Создание топиков
+```
 
 create-topics.sh
+```
 
-Настройка ACL
-
+### Настройка ACL
+```
 set-acl.sh
+```
