@@ -115,22 +115,209 @@ Topic: balanced_topic   TopicId: QUdbsfcmTkydyhe469GI2A PartitionCount: 8       
 
 # Задание 2. Настройка защищённого соединения и управление доступом
 
-### Генерация cертификатов
+### Установка и настройка CA и генерация ключей
+
+### Создадим корневой сертификат (Root CA)
 ```
-generate-certs.sh
+openssl req -new -nodes \
+   -x509 \
+   -days 365 \
+   -newkey rsa:2048 \
+   -keyout ca.key \
+   -out ca.crt \
+   -config ca.cnf
 ```
 
-### Запуск кластера
+### Создадим файл для хранения сертификата безопасности
 ```
-docker compose up -d
-```
-
-### Создание топиков
-```
-create-topics.sh
+cat ca.crt ca.key > ca.pem
 ```
 
-### Настройка ACL
+### Создадим приватный ключ и запрос на сертификат (CSR)
 ```
-set-acl.sh
+openssl req -new \
+    -newkey rsa:2048 \
+    -keyout kafka-1-creds/kafka-1.key \
+    -out kafka-1-creds/kafka-1.csr \
+    -config kafka-1-creds/kafka-1.cnf \
+    -nodes
+```
+
+### Создадим сертификат брокера, подписанный CA
+```
+openssl x509 -req \
+    -days 3650 \
+    -in kafka-1-creds/kafka-1.csr \
+    -CA ca.crt \
+    -CAkey ca.key \
+    -CAcreateserial \
+    -out kafka-1-creds/kafka-1.crt \
+    -extfile kafka-1-creds/kafka-1.cnf \
+    -extensions v3_req
+```
+
+### Создадим PKCS12-хранилище с сертификатом брокера:
+```
+openssl pkcs12 -export \
+    -in kafka-1-creds/kafka-1.crt \
+    -inkey kafka-1-creds/kafka-1.key \
+    -chain \
+    -CAfile ca.pem \
+    -name kafka-1 \
+    -out kafka-1-creds/kafka-1.p12 \
+    -password pass:your-password
+```
+
+### Создадим keystore для Kafka
+```
+keytool -importkeystore \
+    -deststorepass your-password \
+    -destkeystore kafka-1-creds/kafka.kafka-1.keystore.pkcs12 \
+    -srckeystore kafka-1-creds/kafka-1.p12 \
+    -deststoretype PKCS12  \
+    -srcstoretype PKCS12 \
+    -noprompt \
+    -srcstorepass your-password
+```
+
+### Создадим truststore для Kafka
+```
+keytool -import \
+    -file ca.crt \
+    -alias ca \
+    -keystore kafka-1-creds/kafka.kafka-1.truststore.jks \
+    -storepass your-password \
+     -noprompt
+```
+
+### Сохраним пароли
+```
+echo "your-password" > kafka-1-creds/kafka-1_sslkey_creds
+echo "your-password" > kafka-1-creds/kafka-1_keystore_creds
+echo "your-password" > kafka-1-creds/kafka-1_truststore_creds
+```
+
+### Повторим для двух других брокеров
+```
+mkdir -p kafka-2-creds kafka-3-creds
+
+# Для kafka-2
+openssl req -new \
+    -newkey rsa:2048 \
+    -keyout kafka-2-creds/kafka-2.key \
+    -out kafka-2-creds/kafka-2.csr \
+    -config kafka-2-creds/kafka-2.cnf \
+    -nodes
+
+# Для kafka-3
+openssl req -new \
+    -newkey rsa:2048 \
+    -keyout kafka-3-creds/kafka-3.key \
+    -out kafka-3-creds/kafka-3.csr \
+    -config kafka-3-creds/kafka-3.cnf \
+    -nodes
+
+
+# Для kafka-2
+openssl x509 -req \
+    -days 3650 \
+    -in kafka-2-creds/kafka-2.csr \
+    -CA ca.crt \
+    -CAkey ca.key \
+    -CAcreateserial \
+    -out kafka-2-creds/kafka-2.crt \
+    -extfile kafka-2-creds/kafka-2.cnf \
+    -extensions v3_req
+
+# Для kafka-3
+openssl x509 -req \
+    -days 3650 \
+    -in kafka-3-creds/kafka-3.csr \
+    -CA ca.crt \
+    -CAkey ca.key \
+    -CAcreateserial \
+    -out kafka-3-creds/kafka-3.crt \
+    -extfile kafka-3-creds/kafka-3.cnf \
+    -extensions v3_req
+
+
+# Для kafka-2
+openssl pkcs12 -export \
+    -in kafka-2-creds/kafka-2.crt \
+    -inkey kafka-2-creds/kafka-2.key \
+    -chain \
+    -CAfile ca.pem \
+    -name kafka-2 \
+    -out kafka-2-creds/kafka-2.p12 \
+    -password pass:your-password
+
+# Для kafka-3
+openssl pkcs12 -export \
+    -in kafka-3-creds/kafka-3.crt \
+    -inkey kafka-3-creds/kafka-3.key \
+    -chain \
+    -CAfile ca.pem \
+    -name kafka-3 \
+    -out kafka-3-creds/kafka-3.p12 \
+    -password pass:your-password
+
+# Для kafka-2
+keytool -importkeystore \
+    -deststorepass your-password \
+    -destkeystore kafka-2-creds/kafka.kafka-2.keystore.pkcs12 \
+    -srckeystore kafka-2-creds/kafka-2.p12 \
+    -deststoretype PKCS12 \
+    -srcstoretype PKCS12 \
+    -noprompt \
+    -srcstorepass your-password
+
+# Для kafka-3
+keytool -importkeystore \
+    -deststorepass your-password \
+    -destkeystore kafka-3-creds/kafka.kafka-3.keystore.pkcs12 \
+    -srckeystore kafka-3-creds/kafka-3.p12 \
+    -deststoretype PKCS12 \
+    -srcstoretype PKCS12 \
+    -noprompt \
+    -srcstorepass your-password
+
+cp kafka-1-creds/kafka.kafka-1.truststore.jks kafka-2-creds/kafka.kafka-2.truststore.jks
+cp kafka-1-creds/kafka.kafka-1.truststore.jks kafka-3-creds/kafka.kafka-3.truststore.jks
+
+echo "your-password" > kafka-2-creds/kafka-2_sslkey_creds                                                                            
+echo "your-password" > kafka-2-creds/kafka-2_keystore_creds
+echo "your-password" > kafka-2-creds/kafka-2_truststore_creds
+
+echo "your-password" > kafka-3-creds/kafka-3_sslkey_creds                                                                            
+echo "your-password" > kafka-3-creds/kafka-3_keystore_creds
+echo "your-password" > kafka-3-creds/kafka-3_truststore_creds
+```
+
+
+
+## Проверяем продьюсер
+```
+kafka-console-producer --broker-list localhost:9093 --topic test-topic --producer.config client-ssl.properties                       
+
+>hi ivan
+```
+
+## Проверяем консьюмер
+```
+kafka-console-consumer --bootstrap-server localhost:9093 --topic test-topic --consumer.config client-ssl.properties --from-beginning 
+
+hi ivan
+```
+
+## Проверяем консьюмеры других брокеров
+```
+# брокер 2
+kafka-console-consumer --bootstrap-server localhost:9095 --topic test-topic --consumer.config client-ssl.properties --from-beginning
+
+hi ivan
+
+# брокер 3
+kafka-console-consumer --bootstrap-server localhost:9097 --topic test-topic --consumer.config client-ssl.properties --from-beginning
+
+hi ivan
 ```
